@@ -5,12 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>냥이의 별사탕 대작전</title>
 <style>
-  html,body{margin:0;height:100%;background:#2b2340;display:flex;align-items:center;justify-content:center;font-family:'Arial Rounded MT Bold','Segoe UI',system-ui,sans-serif;overflow:hidden}
+  html,body{margin:0;height:100%;background:#2b2340;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Arial Rounded MT Bold','Segoe UI',system-ui,sans-serif;overflow:hidden}
   canvas{display:block;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.55);touch-action:none;cursor:crosshair}
+  #ui{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .btn{background:#4a3f6b;color:#fff;border:none;border-radius:12px;padding:8px 14px;font-size:14px;font-weight:bold;cursor:pointer;font-family:inherit}
+  .btn:hover{background:#5c4f85}
+  .btn:active{transform:scale(.95)}
+  #vol{accent-color:#ffd166;width:110px}
+  #ui label{color:#cbbcf0;font-size:13px;display:flex;align-items:center;gap:6px;font-weight:bold}
 </style>
 </head>
 <body>
 <canvas id="game" width="480" height="640"></canvas>
+<div id="ui">
+ <button id="pauseBtn" class="btn">⏸ 일시정지</button>
+ <button id="restartBtn" class="btn">↻ 처음부터</button>
+ <label>🎵 BGM <input type="range" id="vol" min="0" max="100" value="70"></label>
+</div>
 <script>
 'use strict';
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d');
@@ -19,11 +30,12 @@ const R=(a,b)=>a+Math.random()*(b-a);
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const dist2=(a,b)=>{const dx=a.x-b.x,dy=a.y-b.y;return dx*dx+dy*dy};
 
-function fit(){const s=Math.min(innerWidth/W,innerHeight/H)*0.97;cvs.style.width=W*s+'px';cvs.style.height=H*s+'px'}
+function fit(){const s=Math.min(innerWidth/W,(innerHeight-70)/H)*0.97;cvs.style.width=W*s+'px';cvs.style.height=H*s+'px'}
 addEventListener('resize',fit);fit();
 
 /* ---------- audio ---------- */
 let AC=null,muted=false;
+let bgmVol=0.7;try{const v=localStorage.getItem('nyan_vol');if(v!==null)bgmVol=+v}catch(e){}
 function ac(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==='suspended')AC.resume();return AC}
 function tone(f,d,type,v,slide){const c=ac();if(!c||muted)return;type=type||'square';v=v||0.05;
  const o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.value=f;
@@ -50,7 +62,7 @@ const MELB=[69,0,69,71,72,0,71,0, 69,0,69,71,74,0,72,0, 69,0,69,71,76,0,75,0, 72
 const BASB=[45,0,45,0,41,0,41,0, 43,0,43,0,44,0,44,0, 45,0,45,0,41,0,41,0, 43,0,43,0,44,0,44,0];
 function noteAt(f,t,d,type,v){const c=AC;const o=c.createOscillator(),g=c.createGain();
  o.type=type;o.frequency.value=f;
- g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(v,t+0.012);
+ g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(v*bgmVol,t+0.012);
  g.gain.exponentialRampToValueAtTime(0.0001,t+d);
  o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+d+0.05)}
 function bgmTick(){const c=AC;if(!c||c.state!=='running')return;
@@ -60,11 +72,11 @@ function bgmTick(){const c=AC;if(!c||c.state!=='running')return;
  const playing=G.state==='play'||G.state==='menu'||G.state==='pause';
  while(BGM.next<c.currentTime+0.35){
   const i=BGM.step%32;
-  if(!muted&&playing){
+  if(!muted&&bgmVol>0.01&&playing){
    const mel=bossOn?MELB:MEL,bas=bossOn?BASB:BAS;
-   if(mel[i])noteAt(NOTE(mel[i]),BGM.next,stepDur*0.95,'square',0.02);
-   if(bas[i])noteAt(NOTE(bas[i]),BGM.next,stepDur*1.9,'triangle',0.038);
-   if(i%4===0)noteAt(i%8===0?170:110,BGM.next,0.03,'square',0.012)}
+   if(mel[i])noteAt(NOTE(mel[i]),BGM.next,stepDur*0.95,'square',0.029);
+   if(bas[i])noteAt(NOTE(bas[i]),BGM.next,stepDur*1.9,'triangle',0.054);
+   if(i%4===0)noteAt(i%8===0?170:110,BGM.next,0.03,'square',0.017)}
   BGM.next+=stepDur;BGM.step++}}
 setInterval(bgmTick,90);
 
@@ -73,7 +85,7 @@ function loadBest(){try{return +localStorage.getItem('nyan_best')||0}catch(e){re
 function saveBest(){if(G.score>G.best)G.best=G.score;try{localStorage.setItem('nyan_best',G.best)}catch(e){}}
 const TOTAL=15;
 const G={state:'menu',score:0,best:loadBest(),wave:0,stage:1,shake:0,time:0,banner:0,bannerTxt:'',waveGap:1.2};
-const P={x:W/2,y:H-90,r:16,hearts:3,inv:0,speed:290,fireCd:0,spread:0,rapid:0,shield:false,streak:0,stars:0,twin:false};
+const P={x:W/2,y:H-90,r:16,hearts:5,inv:0,speed:290,fireCd:0,spread:0,rapid:0,shield:false,streak:0,stars:0,twin:false};
 const NEED=20;
 let bullets=[],ebullets=[],enemies=[],powerups=[],parts=[],texts=[],boss=null,spawnList=[],spawnT=0,stars=[],skyT=3;
 const twinX=()=>clamp(P.x-46,20,W-20),twinY=()=>P.y+8;
@@ -98,7 +110,7 @@ addEventListener('pointercancel',()=>ptr.down=false);
 
 /* ---------- game flow ---------- */
 function start(){G.score=0;G.wave=0;G.stage=1;G.shake=0;G.waveGap=1.2;
- P.hearts=3;P.x=W/2;P.y=H-90;P.inv=1;P.spread=0;P.rapid=0;P.shield=false;P.streak=0;P.fireCd=0.3;
+ P.hearts=5;P.x=W/2;P.y=H-90;P.inv=1;P.spread=0;P.rapid=0;P.shield=false;P.streak=0;P.fireCd=0.3;
  P.stars=0;P.twin=false;
  bullets=[];ebullets=[];enemies=[];powerups=[];parts=[];texts=[];boss=null;spawnList=[];stars=[];skyT=3;
  G.state='play';nextWave()}
@@ -506,10 +518,24 @@ if(!ctx.roundRect){CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h
  this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);
  this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);this.closePath();return this}}
 
+/* ---------- UI controls ---------- */
+const pauseBtn=document.getElementById('pauseBtn'),restartBtn=document.getElementById('restartBtn'),volEl=document.getElementById('vol');
+volEl.value=Math.round(bgmVol*100);
+volEl.addEventListener('input',e=>{bgmVol=(+e.target.value)/100;
+ try{localStorage.setItem('nyan_vol',bgmVol)}catch(err){}});
+pauseBtn.addEventListener('click',()=>{ac();
+ if(G.state==='play')G.state='pause';
+ else if(G.state==='pause')G.state='play';
+ pauseBtn.blur()});
+restartBtn.addEventListener('click',()=>{ac();start();restartBtn.blur()});
+
 /* ---------- loop ---------- */
 let last=0;
 function loop(ts){const dt=Math.min(0.033,(ts-last)/1000||0.016);last=ts;G.time+=dt;
- update(dt);draw();requestAnimationFrame(loop)}
+ update(dt);draw();
+ const pl=G.state==='pause'?'▶ 계속하기':'⏸ 일시정지';
+ if(pauseBtn.textContent!==pl)pauseBtn.textContent=pl;
+ requestAnimationFrame(loop)}
 requestAnimationFrame(loop);
 </script>
 </body>
