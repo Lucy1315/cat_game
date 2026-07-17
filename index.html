@@ -7,7 +7,7 @@
 <style>
   html,body{margin:0;height:100%;background:#2b2340;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Arial Rounded MT Bold','Segoe UI',system-ui,sans-serif;overflow:hidden}
   canvas{display:block;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.55);touch-action:none;cursor:crosshair}
-  #ui{display:flex;align-items:center;gap:10px;margin-top:10px}
+  #ui{display:flex;align-items:center;gap:10px;margin-top:16px}
   .btn{background:#4a3f6b;color:#fff;border:none;border-radius:12px;padding:8px 14px;font-size:14px;font-weight:bold;cursor:pointer;font-family:inherit}
   .btn:hover{background:#5c4f85}
   .btn:active{transform:scale(.95)}
@@ -18,6 +18,7 @@
 <body>
 <canvas id="game" width="480" height="640"></canvas>
 <div id="ui">
+ <button id="resumeBtn" class="btn" style="display:none">▶ 이어하기</button>
  <button id="pauseBtn" class="btn">⏸ 일시정지</button>
  <button id="restartBtn" class="btn">↻ 처음부터</button>
  <label>🎵 BGM <input type="range" id="vol" min="0" max="100" value="70"></label>
@@ -90,6 +91,16 @@ const NEED=20;
 let bullets=[],ebullets=[],enemies=[],powerups=[],parts=[],texts=[],boss=null,spawnList=[],spawnT=0,stars=[],skyT=3;
 const twinX=()=>clamp(P.x-46,20,W-20),twinY=()=>P.y+8;
 
+/* ---------- checkpoint (인앱 브라우저 새로고침 대비 이어하기) ---------- */
+let ck=null;try{ck=JSON.parse(localStorage.getItem('nyan_save'))||null}catch(e){ck=null}
+function saveCk(){if(G.wave<2||G.wave>TOTAL)return;
+ ck={w:G.wave,s:G.score,h:P.hearts,st:P.stars,tw:P.twin};
+ try{localStorage.setItem('nyan_save',JSON.stringify(ck))}catch(e){}}
+function clearCk(){ck=null;try{localStorage.removeItem('nyan_save')}catch(e){}}
+function resumeGame(){if(!ck)return;const cp=ck;start();
+ G.wave=cp.w-1;G.score=cp.s;P.hearts=cp.h;P.stars=cp.st;P.twin=!!cp.tw;
+ enemies=[];spawnList=[];boss=null;G.banner=0;nextWave()}
+
 /* ---------- input ---------- */
 const keys={};
 addEventListener('keydown',e=>{keys[e.code]=true;
@@ -102,6 +113,7 @@ addEventListener('keyup',e=>keys[e.code]=false);
 const ptr={down:false,x:W/2,y:H-90};
 function ptrPos(e){const r=cvs.getBoundingClientRect();ptr.x=(e.clientX-r.left)*W/r.width;ptr.y=(e.clientY-r.top)*H/r.height}
 cvs.addEventListener('pointerdown',e=>{ac();ptrPos(e);
+ if(G.state==='pause'){G.state='play';return}
  if(G.state==='menu'||G.state==='gameover'||G.state==='victory'){start();return}
  ptr.down=true});
 cvs.addEventListener('pointermove',e=>{if(ptr.down)ptrPos(e)});
@@ -116,8 +128,8 @@ function start(){G.score=0;G.wave=0;G.stage=1;G.shake=0;G.waveGap=1.2;
  G.state='play';nextWave()}
 
 function nextWave(){G.wave++;G.stage=Math.ceil(G.wave/5);G.waveGap=1.2;
- if(G.wave>TOTAL){G.state='victory';saveBest();sfx.clear();return}
- G.banner=2;
+ if(G.wave>TOTAL){G.state='victory';saveBest();clearCk();sfx.clear();return}
+ G.banner=2;saveCk();
  spawnList=[];spawnT=1.4;
  if(G.wave%5===0){G.bannerTxt='보스 등장!';boss=makeBoss();sfx.boss();return}
  G.bannerTxt='WAVE '+G.wave;
@@ -192,7 +204,7 @@ function hitPlayer(){
   burst(twinX(),twinY(),'#ffffff',16);addText(P.x,P.y-26,'분신이 대신 맞았다!','#ffd166');
   tone(300,0.25,'triangle',0.06,-150);return}
  P.hearts--;P.streak=0;P.inv=1.8;G.shake=8;sfx.hurt();burst(P.x,P.y,'#ff6b8a',16);
- if(P.hearts<=0){G.state='gameover';saveBest()}}
+ if(P.hearts<=0){G.state='gameover';saveBest();clearCk()}}
 function bossDown(){
  const pts=Math.round(5000*mult());G.score+=pts;
  addText(boss.x,boss.y,'+'+pts,'#ffd166');
@@ -578,7 +590,8 @@ function drawMenu(){
  txt('P 일시정지 · M 음소거',W/2,532,13,'rgba(255,255,255,.95)');
  txt('별사탕 ★ 20개를 모으면 냥냥이가 두 마리!',W/2,554,13,'#ffd166');
  txt('웨이브 30개 · 보스 6마리를 물리치세요!',W/2,576,14,'#ffb3c6');
- if(G.best>0)txt('최고 기록: '+G.best.toLocaleString(),W/2,600,14,'#ffd166')}
+ if(G.best>0)txt('최고 기록: '+G.best.toLocaleString(),W/2,600,14,'#ffd166');
+ if(ck)txt('[이어하기] 버튼으로 웨이브 '+ck.w+'부터 계속!',W/2,624,14,'#b7f57e')}
 
 function drawEnd(win){
  ctx.fillStyle='rgba(40,30,60,.72)';ctx.fillRect(0,0,W,H);
@@ -619,7 +632,7 @@ function draw(){
  for(const t of texts){ctx.globalAlpha=Math.min(1,t.life*2);txt(t.txt,t.x,t.y,16,t.color);ctx.globalAlpha=1}
  drawHUD();
  if(G.state==='pause'){ctx.fillStyle='rgba(40,30,60,.6)';ctx.fillRect(0,0,W,H);
-  txt('일시정지',W/2,H/2-20,36,'#fff');txt('P를 눌러 계속',W/2,H/2+25,16,'rgba(255,255,255,.95)')}
+  txt('일시정지',W/2,H/2-20,36,'#fff');txt('화면을 탭하거나 P를 눌러 계속',W/2,H/2+25,16,'rgba(255,255,255,.95)')}
  if(G.state==='gameover')drawEnd(false);
  if(G.state==='victory')drawEnd(true);
  ctx.restore()}
@@ -638,7 +651,11 @@ pauseBtn.addEventListener('click',()=>{ac();
  if(G.state==='play')G.state='pause';
  else if(G.state==='pause')G.state='play';
  pauseBtn.blur()});
-restartBtn.addEventListener('click',()=>{ac();start();restartBtn.blur()});
+restartBtn.addEventListener('click',()=>{ac();
+ if((G.state==='play'||G.state==='pause')&&!confirm('진행 중인 게임을 버리고 처음부터 시작할까요?')){restartBtn.blur();return}
+ start();restartBtn.blur()});
+const resumeBtn=document.getElementById('resumeBtn');
+resumeBtn.addEventListener('click',()=>{ac();resumeGame();resumeBtn.blur()});
 
 /* ---------- loop ---------- */
 let last=0;
@@ -646,6 +663,8 @@ function loop(ts){const dt=Math.min(0.033,(ts-last)/1000||0.016);last=ts;G.time+
  update(dt);draw();
  const pl=G.state==='pause'?'▶ 계속하기':'⏸ 일시정지';
  if(pauseBtn.textContent!==pl)pauseBtn.textContent=pl;
+ const rs=(G.state==='menu'&&ck)?'inline-block':'none';
+ if(resumeBtn.style.display!==rs)resumeBtn.style.display=rs;
  requestAnimationFrame(loop)}
 requestAnimationFrame(loop);
 </script>
